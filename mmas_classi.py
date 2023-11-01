@@ -287,7 +287,7 @@ class MMAS:
                 self.pheromone[i][j] = max(self.min_trail, min(self.max_trail, self.pheromone[i][j]))
                 self.pheromone[j][i] = max(self.min_trail, min(self.max_trail, self.pheromone[i][j]))
             current_tour.remove(i)
-        self.pheromone[-1][0]=(1-self.rho)*self.pheromone[-1][0] + delta_pheromone
+        self.pheromone[-1][0]=(1-self.rho)*self.pheromone[-1][0] + delta_best
         self.pheromone[0][-1] = max(self.min_trail, min(self.max_trail, self.pheromone[-1][0]))
         self.pheromone[-1][0] = max(self.min_trail, min(self.max_trail, self.pheromone[-1][0]))
                     
