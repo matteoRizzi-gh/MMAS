@@ -279,7 +279,7 @@ class MMAS:
             for j in range(self.city_num): 
             #delta_best viene sommato solo agli archi del percorso migliore
                 if j==current_tour[1]:
-                    delta_pheromone = 0.05
+                    delta_pheromone = delta_best
                 else:
                     delta_pheromone=0.0
                 
