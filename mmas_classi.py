@@ -1,5 +1,6 @@
 import random as rd
 import math
+from sre_constants import BRANCH
 from geopy.distance import geodesic
 import matplotlib.pyplot as plt
 
@@ -203,20 +204,24 @@ class MMAS:
 
     
     #probabilità della formica di passare attraverso l'arco (u,v)
-    def edge_prob(self, u, v): #funzione 3
+    def edge_prob(self, u, v, unvisited_cities): #funzione 3
         
-        tau_uv = self.pheromone[u][v]
-        eta_uv = 1.0 / self.distance_matrix[u][v] #visibilità
+        tau_values = [self.pheromone[u][v] for v in unvisited_cities]
+        eta_values = [1.0 / self.distance_matrix[u][v] for v in unvisited_cities]  #visibilità
 
         denominator = 0.0
-        for w in range(len(self.pheromone[u])):
-            if w != u:
-                #tutti gli archi collegati w con u
-                tau_uw = self.pheromone[u][w]
-                #visibilità delle città u,w
-                eta_uw = 1.0 / self.distance_matrix[u][w]
-                denominator += (tau_uw ** self.alpha) * (eta_uw ** self.beta)
-        prob = (tau_uv**self.alpha)*(eta_uv**self.beta) / denominator
+        for i in range(len(unvisited_cities)):
+            tau = tau_values[i]
+            eta = eta_values[i]
+            denominator += (tau ** self.alpha) * (eta ** self.beta)
+    
+        if denominator == 0:
+            return 0.0
+        tau_uv = self.pheromone[u][v]
+        eta_uv = 1.0 / self.distance_matrix[u][v] #visibilità
+        
+        prob  = (tau_uv ** self.alpha) * (eta_uv ** self.beta) / denominator
+
         return prob
         
 
@@ -236,11 +241,14 @@ class MMAS:
             #calcolo del vettore delle probabilità di attraversare gli archi collegati all'attuale città
             prob=[]
             for city in unvisited_cities:
-                probability = self.edge_prob(current_city, city)
+                probability = self.edge_prob(current_city, city, unvisited_cities)
+                
                 prob.append((city, probability))
+                
+                
 
              # Introduzione di una perturbazione casuale che faccia saltare una formica ad una città casuale, così da favorire l'esplorazione
-            if rd.random() < 0.1:  #10% di probabilità di perturbazione
+            if rd.random() < 0.25:  #25% di probabilità di perturbazione
                 non_visited = [city for city in unvisited_cities]
                 next_city = rd.choice(non_visited)
             else:
@@ -254,6 +262,7 @@ class MMAS:
                  else:
                     #calcolo della probabilità totale tra le città e i vertici
                     total_prob = sum(p[1] for p in prob)
+                    #print(total_prob)
 
                     choice = rd.uniform(0, total_prob) #generato casualmenet per scegliere la città successiva
                     prob.sort(key=lambda x: x[1])#prob contiene le coppie città, probablità e viene ordinaro rispetto alla probabilità
@@ -283,11 +292,11 @@ class MMAS:
                 else:
                     delta_pheromone=0.0
                 
-                self.pheromone[i][j]=(1-self.rho)*self.pheromone[i][j] + delta_pheromone
+                self.pheromone[i][j]= self.rho*self.pheromone[i][j] + delta_pheromone
                 self.pheromone[i][j] = max(self.min_trail, min(self.max_trail, self.pheromone[i][j]))
                 self.pheromone[j][i] = max(self.min_trail, min(self.max_trail, self.pheromone[i][j]))
             current_tour.remove(i)
-        self.pheromone[-1][0]=(1-self.rho)*self.pheromone[-1][0] + delta_best
+        self.pheromone[-1][0]=self.rho*self.pheromone[-1][0] + delta_best
         self.pheromone[0][-1] = max(self.min_trail, min(self.max_trail, self.pheromone[-1][0]))
         self.pheromone[-1][0] = max(self.min_trail, min(self.max_trail, self.pheromone[-1][0]))
                     
@@ -310,33 +319,48 @@ class MMAS:
         return length
     
 
-    def calculate_branching_factor(self, ant):
+    def calculate_branching_factor(self, ant, lambda_value):
         city_num = self.city_num
-        total_branching_factor = 0.0
+        total_lambda_branching_factor = 0
         for i in range(city_num):
             current_city = ant.tour[i]
-            for j in range(city_num):
-                if i != j:
-                    next_city = ant.tour[j]
-                    prob_ij = self.edge_prob(current_city, next_city)
-                    total_branching_factor += prob_ij
-                    
-        return total_branching_factor / (city_num * (city_num - 1))
-    
+            all_cities=set(ant.tour) - {ant.tour[i]}
+            # max e minimo della probabilità degli archi
+            prob = []
+            for next_city in all_cities:
+                prob_ij = self.edge_prob(current_city, next_city, all_cities)
+                prob.append(prob_ij)
+            Max_prob = max(prob)
+            Min_prob = min(prob)
+            delta_r = Max_prob - Min_prob
 
-    def smooth_pheromone(self, branching_factor):
+            # Calcolo del lambda-branching factor
+            lambda_threshold = lambda_value * delta_r + Min_prob
+            lambda_branching_factor = sum(1 for prob_ij in prob if prob_ij > lambda_threshold)
+
+            total_lambda_branching_factor += lambda_branching_factor
+
+        return total_lambda_branching_factor / (city_num * (city_num - 1))
+
+
+    def smooth_pheromone(self, best_tour):
         
         #print(branching_factor)
 
-        if branching_factor < self.stagnation_threshold:
-            # Calcola la differenza tra trail_max e i valori correnti dei feromoni e aggiorna proporzionalmente
-            for i in range(self.city_num):
-                for j in range(self.city_num):
-                    if i != j:
-                        delta_pheromone = self.max_trail - self.pheromone[i][j]
-                        self.pheromone[i][j] += delta_pheromone
-                        # I valori dei feromoni devono entro i limiti min_trail e max_trail
-                        self.pheromone[i][j] = max(self.min_trail, min(self.max_trail, self.pheromone[i][j]))
+        # differenza tra trail_max e i valori correnti dei feromoni e aggiorna proporzionalmente
+        current_tour=best_tour.copy();
+        for _ in range(self.city_num-1):
+            i=current_tour[0]
+            for j in range(self.city_num):
+               if j==current_tour[1]:
+                    delta_pheromone = 0.0
+               else:
+                    delta_pheromone = 0.5*(self.max_trail - self.pheromone[i][j])
+               self.pheromone[i][j] += delta_pheromone
+               self.pheromone[i][j] = max(self.min_trail, min(self.max_trail, self.pheromone[i][j]))
+               self.pheromone[j][i] = max(self.min_trail, min(self.max_trail, self.pheromone[i][j]))
+            current_tour.remove(i)
+               
 
 
      #aggiornamento dati di convergenza
@@ -354,7 +378,7 @@ class MMAS:
             for ant in ants:
                 # costruzione del percorso
                 self.construction_tour(ant)
-
+                
                 # calcolo della lunghezza del percorso
                 tour_length = self.tour_length(ant.tour)
 
@@ -365,9 +389,10 @@ class MMAS:
                 
             #verifica di stagnamento
             if iteration % 10==0:
-                branching_factor = self.calculate_branching_factor(ant)
+                branching_factor = self.calculate_branching_factor(ant, 0.1)
+                #print(branching_factor)
                 if branching_factor < self.stagnation_threshold:
-                    self.smooth_pheromone(branching_factor)
+                    self.smooth_pheromone( best_tour)
             # Aggiornamenot livelli di feromoni
             self.update_pheromone(best_tour_length, best_tour)
             
@@ -376,9 +401,6 @@ class MMAS:
             #print("Best Tour:", best_tour)
             
             self.update_convergence_data(best_tour_length)
-        #for row in self.pheromone:
-         #      print(row)
-          #     print(" ")
         return best_tour_length, best_tour
     
     def plot_convergence(self, convergence_data):
