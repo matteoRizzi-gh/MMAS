@@ -240,13 +240,12 @@ class MMAS:
         while unvisited_cities:
             #calcolo del vettore delle probabilità di attraversare gli archi collegati all'attuale città
             prob=[]
+
             for city in unvisited_cities:
                 probability = self.edge_prob(current_city, city, unvisited_cities)
                 
                 prob.append((city, probability))
                 
-                
-
              # Introduzione di una perturbazione casuale che faccia saltare una formica ad una città casuale, così da favorire l'esplorazione
             if rd.random() < 0.25:  #25% di probabilità di perturbazione
                 non_visited = [city for city in unvisited_cities]
@@ -278,6 +277,7 @@ class MMAS:
             ant.tour.append(next_city)
             unvisited_cities.remove(next_city)
             current_city = next_city
+            
 
 
     def update_pheromone(self,  best_tour_length, best_tour):
@@ -368,6 +368,14 @@ class MMAS:
         self.convergence_data.append(tour_length)
         
 
+    
+    def reset_pheromone(self):
+        city_num = self.city_num
+        for i in range(city_num):
+            for j in range(city_num):
+                self.pheromone[i][j] = self.max_pheromone
+
+
     #risoluzione effettiva del problema
     def solve(self):
         best_tour = None
@@ -395,6 +403,10 @@ class MMAS:
                     self.smooth_pheromone( best_tour)
             # Aggiornamenot livelli di feromoni
             self.update_pheromone(best_tour_length, best_tour)
+            
+            if iteration % 100==0:
+                self.reset_pheromone()
+                #print(self.pheromone)
             
             #print("iterazione ", iteration)
             #print("Best Tour Length:", best_tour_length)
