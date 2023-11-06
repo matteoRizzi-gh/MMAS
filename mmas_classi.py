@@ -1,6 +1,4 @@
 import random as rd
-import math
-from sre_constants import BRANCH
 from geopy.distance import geodesic
 import matplotlib.pyplot as plt
 
@@ -201,27 +199,40 @@ class MMAS:
         self.pheromone=[[max_pheromone]*city_num for _ in range(city_num)]
         #self.pheromone_delta = [[0.0] * city_num for _ in range(city_num)]  #per approccio global-best, devo salvare tutte le informazioni di tutte le formiche per ogni iterazione
         self.convergence_data = []  #lista vuota per i dati di convergenza
+        self.global_best_tour = None
+        self.global_best_tour_length = float('inf')
+        self.pheromone_data = [[[] for _ in range(city_num)] for _ in range(city_num)] #lista vuota per i dati dei feromoni
+        self.colony = [Ants(distance_matrix, alpha, beta) for _ in range(num_ants)]   #creazione della colonia
 
     
     #probabilità della formica di passare attraverso l'arco (u,v)
     def edge_prob(self, u, v, unvisited_cities): #funzione 3
         
+        # Calcola i valori dei feromoni per tutti gli archi verso città non ancora visitate.
         tau_values = [self.pheromone[u][v] for v in unvisited_cities]
-        eta_values = [1.0 / self.distance_matrix[u][v] for v in unvisited_cities]  #visibilità
-
+        
+        # Calcola i valori di visibilità per tutti gli archi verso città non ancora visitate.
+        eta_values = [1.0 / self.distance_matrix[u][v] for v in unvisited_cities] 
+        
+        # Calcola il denominatore per la probabilità.
         denominator = 0.0
         for i in range(len(unvisited_cities)):
             tau = tau_values[i]
             eta = eta_values[i]
             denominator += (tau ** self.alpha) * (eta ** self.beta)
-    
+        
+        # Se il denominatore è zero, restituisci una probabilità di zero.
         if denominator == 0:
             return 0.0
-        tau_uv = self.pheromone[u][v]
-        eta_uv = 1.0 / self.distance_matrix[u][v] #visibilità
         
+        # Calcola i valori di feromoni e visibilità per l'arco (u, v).
+        tau_uv = self.pheromone[u][v]
+        eta_uv = 1.0 / self.distance_matrix[u][v]
+        
+        # Calcola la probabilità utilizzando la formula soprastante
         prob  = (tau_uv ** self.alpha) * (eta_uv ** self.beta) / denominator
 
+        # Restituisci la probabilità calcolata.
         return prob
         
 
@@ -246,7 +257,7 @@ class MMAS:
                 
                 prob.append((city, probability))
                 
-             # Introduzione di una perturbazione casuale che faccia saltare una formica ad una città casuale, così da favorire l'esplorazione
+            # Introduzione di una perturbazione casuale che faccia saltare una formica ad una città casuale, così da favorire l'esplorazione
             if rd.random() < 0.25:  #25% di probabilità di perturbazione
                 non_visited = [city for city in unvisited_cities]
                 next_city = rd.choice(non_visited)
@@ -263,7 +274,7 @@ class MMAS:
                     total_prob = sum(p[1] for p in prob)
                     #print(total_prob)
 
-                    choice = rd.uniform(0, total_prob) #generato casualmenet per scegliere la città successiva
+                    choice = rd.uniform(0, total_prob) #generato casualmente per scegliere la città successiva
                     prob.sort(key=lambda x: x[1])#prob contiene le coppie città, probablità e viene ordinaro rispetto alla probabilità
                     cumulative_prob = 0 #accumulatore
                     #scorro il vettore prob e sommo le probabilità, quando la somma è maggiore di choice la formica sceglie la città
@@ -282,24 +293,23 @@ class MMAS:
 
     def update_pheromone(self,  best_tour_length, best_tour):
         delta_best = 1.0 / best_tour_length
-        current_tour=best_tour.copy();
-        for _ in range(self.city_num-1):
-            i=current_tour[0]
-            for j in range(self.city_num): 
-            #delta_best viene sommato solo agli archi del percorso migliore
-                if j==current_tour[1]:
-                    delta_pheromone = delta_best
-                else:
-                    delta_pheromone=0.0
-                
-                self.pheromone[i][j]= self.rho*self.pheromone[i][j] + delta_pheromone
+        for i in range(self.city_num-1):
+            for j in range(i+1, self.city_num):  
+                self.pheromone[i][j] *= self.rho 
                 self.pheromone[i][j] = max(self.min_trail, min(self.max_trail, self.pheromone[i][j]))
-                self.pheromone[j][i] = max(self.min_trail, min(self.max_trail, self.pheromone[i][j]))
-            current_tour.remove(i)
-        self.pheromone[-1][0]=self.rho*self.pheromone[-1][0] + delta_best
-        self.pheromone[0][-1] = max(self.min_trail, min(self.max_trail, self.pheromone[-1][0]))
-        self.pheromone[-1][0] = max(self.min_trail, min(self.max_trail, self.pheromone[-1][0]))
-                    
+                self.pheromone[j][i] = self.pheromone[i][j]
+        for i in range(self.city_num-1):
+            j = best_tour[i]
+            k = best_tour[i+1]
+            self.pheromone[j][k] += delta_best
+            self.pheromone[j][k] = max(self.min_trail, min(self.max_trail, self.pheromone[j][k]))
+            self.pheromone[k][j] = self.pheromone[j][k]
+        j=best_tour[0]
+        k=best_tour[-1]
+        self.pheromone[j][k] += delta_best
+        self.pheromone[j][k] = max(self.min_trail, min(self.max_trail, self.pheromone[j][k]))
+        self.pheromone[k][j] = self.pheromone[j][k]
+           
                    
                 
                 
@@ -307,6 +317,7 @@ class MMAS:
 
     #calcolo della lunghezza del percorso compiuto dalla formica
     def tour_length(self, tour):
+        
         length=0
         for i in range(len(tour)-1):
             current_city=tour[i]
@@ -382,7 +393,7 @@ class MMAS:
         best_tour_length = float('inf')
 
         for iteration in range(self.max_iteration):
-            ants = [Ants(self.distance_matrix, self.alpha, self.beta) for _ in range(self.num_ants)]
+            ants=self.colony
             for ant in ants:
                 # costruzione del percorso
                 self.construction_tour(ant)
@@ -394,32 +405,57 @@ class MMAS:
                 if tour_length < best_tour_length:
                     best_tour_length = tour_length
                     best_tour = ant.tour[:]
+                    
+                if tour_length < self.global_best_tour_length:
+                    self.global_best_tour_length = tour_length
+                    self.global_best_tour = ant.tour[:]
                 
             #verifica di stagnamento
             if iteration % 10==0:
                 branching_factor = self.calculate_branching_factor(ant, 0.1)
                 #print(branching_factor)
                 if branching_factor < self.stagnation_threshold:
-                    self.smooth_pheromone( best_tour)
-            # Aggiornamenot livelli di feromoni
+                    self.smooth_pheromone(self.global_best_tour)
+            # Aggiornamento livelli di feromoni
             self.update_pheromone(best_tour_length, best_tour)
             
+            #self.update_pheromone(self.global_best_tour_length, self.global_best_tour)
+
             if iteration % 100==0:
                 self.reset_pheromone()
                 #print(self.pheromone)
             
             #print("iterazione ", iteration)
-            #print("Best Tour Length:", best_tour_length)
-            #print("Best Tour:", best_tour)
+            #print("Best Tour Length:", self.global_best_tour_length)
+            #print("Best Tour:", self.global_best_tour)
+            if self.max_iteration-iteration<100:
+                for i in range(self.city_num):
+                    for j in range(self.city_num):
+                        self.pheromone_data[i][j].append(self.pheromone[i][j])
             
-            self.update_convergence_data(best_tour_length)
-        return best_tour_length, best_tour
+            self.update_convergence_data(self.global_best_tour_length)
+        return self.global_best_tour_length, self.global_best_tour
     
+
+
     def plot_convergence(self, convergence_data):
        iterations = list(range(1, len(convergence_data) + 1))
-       plt.plot(iterations, convergence_data, marker='o', linestyle='-', color='b')
+       plt.plot(iterations, convergence_data, linestyle='-', color='b') #marker='o'
        plt.xlabel('Iteration')
        plt.ylabel('Best Tour Length')
        plt.title('Convergence Analysis')
        plt.grid(True)
        plt.show()
+       
+
+    def plot_pheromone(self, pheromone_data):
+        city_num = self.city_num
+        for i in range(city_num):
+            for j in range(city_num):
+                plt.plot(pheromone_data[i][j], label=f'Pheromone ({i}, {j})')
+
+        plt.xlabel('Iteration')
+        plt.ylabel('Pheromone Level')
+        plt.title('Pheromone Level Analysis')
+        plt.grid(True)
+        plt.show()
