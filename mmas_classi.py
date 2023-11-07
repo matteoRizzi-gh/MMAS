@@ -183,7 +183,7 @@ class Ants:
 #Oss. posso togliere max_pheromone dall'istanza del costruttore ed imporlo uguale ad 1.0
 
 class MMAS:
-    def __init__(self, city_num, alpha, beta, rho, q0, distance_matrix, max_iteration,max_trail, min_trail, max_pheromone, stagnation_threshold, num_ants):
+    def __init__(self, city_num, alpha, beta, rho, q0, distance_matrix, max_iteration,max_trail, min_trail, max_pheromone, stagnation_threshold, num_ants, res):
         self.city_num = city_num
         self.alpha = alpha  # peso dato ai feromoni
         self.beta = beta  # peso dato alla visibilità
@@ -203,7 +203,7 @@ class MMAS:
         self.global_best_tour_length = float('inf')
         self.pheromone_data = [[[] for _ in range(city_num)] for _ in range(city_num)] #lista vuota per i dati dei feromoni
         self.colony = [Ants(distance_matrix, alpha, beta) for _ in range(num_ants)]   #creazione della colonia
-
+        self.res=res
     
     #probabilità della formica di passare attraverso l'arco (u,v)
     def edge_prob(self, u, v, unvisited_cities): #funzione 3
@@ -258,7 +258,7 @@ class MMAS:
                 prob.append((city, probability))
                 
             # Introduzione di una perturbazione casuale che faccia saltare una formica ad una città casuale, così da favorire l'esplorazione
-            if rd.random() < 0.25:  #25% di probabilità di perturbazione
+            if rd.random() < 0.05:  #10% di probabilità di perturbazione
                 non_visited = [city for city in unvisited_cities]
                 next_city = rd.choice(non_visited)
             else:
@@ -344,13 +344,11 @@ class MMAS:
             Max_prob = max(prob)
             Min_prob = min(prob)
             delta_r = Max_prob - Min_prob
-
             # Calcolo del lambda-branching factor
             lambda_threshold = lambda_value * delta_r + Min_prob
             lambda_branching_factor = sum(1 for prob_ij in prob if prob_ij > lambda_threshold)
 
             total_lambda_branching_factor += lambda_branching_factor
-
         return total_lambda_branching_factor / (city_num * (city_num - 1))
 
 
@@ -400,38 +398,33 @@ class MMAS:
                 
                 # calcolo della lunghezza del percorso
                 tour_length = self.tour_length(ant.tour)
-
                 # aggiornamento del percorso più breve se viene trovato (iteration-best)
                 if tour_length < best_tour_length:
                     best_tour_length = tour_length
                     best_tour = ant.tour[:]
-                    
                 if tour_length < self.global_best_tour_length:
                     self.global_best_tour_length = tour_length
                     self.global_best_tour = ant.tour[:]
-                
             #verifica di stagnamento
             if iteration % 10==0:
-                branching_factor = self.calculate_branching_factor(ant, 0.1)
-                #print(branching_factor)
+                branching_factor = self.calculate_branching_factor(ant, 0.5)
                 if branching_factor < self.stagnation_threshold:
                     self.smooth_pheromone(self.global_best_tour)
             # Aggiornamento livelli di feromoni
-            self.update_pheromone(best_tour_length, best_tour)
+            self.update_pheromone(best_tour_length, best_tour)    #iteration best
             
-            #self.update_pheromone(self.global_best_tour_length, self.global_best_tour)
+            #self.update_pheromone(self.global_best_tour_length, self.global_best_tour)     #global best
+
 
             if iteration % 100==0:
                 self.reset_pheromone()
                 #print(self.pheromone)
-            
-            #print("iterazione ", iteration)
-            #print("Best Tour Length:", self.global_best_tour_length)
-            #print("Best Tour:", self.global_best_tour)
-            if self.max_iteration-iteration<100:
-                for i in range(self.city_num):
-                    for j in range(self.city_num):
-                        self.pheromone_data[i][j].append(self.pheromone[i][j])
+                #print("iterazione ", iteration)
+                #print("Best Tour Length:", self.global_best_tour_length)
+                #print("Best Tour:", self.global_best_tour)
+                #for i in range(self.city_num):
+                    #for j in range(self.city_num):
+                        #self.pheromone_data[i][j].append(self.pheromone[i][j])
             
             self.update_convergence_data(self.global_best_tour_length)
         return self.global_best_tour_length, self.global_best_tour
@@ -458,4 +451,5 @@ class MMAS:
         plt.ylabel('Pheromone Level')
         plt.title('Pheromone Level Analysis')
         plt.grid(True)
+        plt.legend(loc='upper right')
         plt.show()
